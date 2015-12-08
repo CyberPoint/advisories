@@ -1,0 +1,54 @@
+SRT-VR-12NOV2015: BitDefender Enterprise arrakis3 Stack Overflow RCE
+ 
+Severity:
+High (Unauthenticated RCE)
+ 
+ 
+Systems Affected:
+BitDefender GravityZone Server (prior to 5.1.23-472)
+BitDefender Endpoint Security Clients (prior to 5.3.26.746)
+BitDefender Endpoint Security Tools Clients (prior to 6.2.6.670)
+ 
+ 
+Description:
+Arrakis is a custom HTTP server used to distribute updates to connected clients of the GravityZone server. This arrakis3 web server is vulnerable to a stack-based buffer overflow that can result in remote code execution as the executing user. This vulnerability affects all BitDefender management installations, as well as any endpoint installations with the "relay" option enabled.
+ 
+ 
+Technical Description:
+Arrakis Web Server is vulnerable to a stack-based buffer overflow. When a request packet of size > 0x4000 bytes is sent to a listening server (TCP/7074), the stack is corrupted with user-controlled data. This is due to an unchecked buffer size when processing the HTTP client request. This can result in remote code execution without credentials.
+On the GravityZone server, this user is the "bitdefender" user. While this is an unprivileged user (non-root), it does offer many opportunities to infect connecting clients as this service has access to all GravityZone services.
+On GravityZone Endpoint Security clients configured to act as relays, the process is named differently ("EPUpdateServer.exe" on win32) and runs as SYSTEM/root.
+ 
+The following disasm snippet is from the patched version of arrakis3:
+.text:00000000000201AB                 mov     rdx, [rbp+0]
+.text:00000000000201AF                 cdqe
+.text:00000000000201B1                 mov     rcx, [rdx+rax*8]
+.text:00000000000201B5                 cmp     qword ptr [rcx+4800h], 0   ;test to ensure size is ngt 0x4800
+                                                                          ;poor man's strlen check
+.text:00000000000201BD                 jz      loc_2024F
+.text:00000000000201C3                 mov     [rsp+458h+var_40], 400h
+.text:00000000000201CF                 mov     rax, [rdx+rax*8]
+.text:00000000000201D3                 mov     rsi, r13
+.text:00000000000201D6                 mov     rdx, r14
+.text:00000000000201D9                 mov     rdi, [rax+4800h]           ;deref same buffer that was checked
+.text:00000000000201E0                 mov     rax, [rdi]
+.text:00000000000201E3                 call    qword ptr [rax+20h]        ;process request -> boom
+ 
+This patch, albeit not a standard way to check for the string length, does enforce a buffer no more than 0x4800 bytes in length.
+ 
+ 
+Mitigation / Protection:
+Upgrade your affected software suites to the following or greater:
+* GravityZone: 5.1.23-472 (19NOV2015)
+* Endpoint Security: 5.3.26.746 (25NOV2015)
+* Endpoint Security Tools: 6.2.6.670 (17NOV2015)
+ 
+ 
+Credit:
+Discovery: Andre Derek Protas of CyberPoint SRT
+  
+ 
+Related Links:
+* Patch - GravityZone: http://www.bitdefender.com/support/bitdefender-gravityzone-5-1-23-472-release-notes-1522.html
+* Patch - Endpoint Security: http://www.bitdefender.com/support/endpoint-security-by-bitdefender-version-5-3-26-746-release-notes-1523.html
+* Patch - Endpoint Security Tools: http://www.bitdefender.com/support/bitdefender-endpoint-security-tools-version-6-2-6-670-release-notes-1520.html
