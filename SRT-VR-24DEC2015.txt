@@ -133,7 +133,7 @@ elevation of privileges, or remote code execution.
 
 
 Mitigation / Protection:
-Apply the Microsoft supplied patch MS16-014 released on 09FEB2015.
+Apply the Microsoft supplied patch MS16-014 released on 09FEB2016.
 
 
 Credit:
