@@ -1,0 +1,150 @@
+SRT-VR-24DEC2015: Microsoft Windows PhoneInfo.dll DLL Hijack Vulnerability
+
+Severity:
+Moderate (DLL Hijack)
+
+
+Systems Affected / Tested:
+Microsoft Windows 10
+
+
+Description:
+Microsoft Windows 10 appears to be vulnerable to an insecure DLL Loading vulnerability that could 
+allow attackers to perform a DLL hijack or sideload attack that could allow arbitary code to execute 
+on the vulnerable machine.  Arbitrary code will often execute in the context of the current user, 
+however in some scenarios (dependeing on the implementation and privileges of the calling software), 
+this could potentially result in remote code execution or privilege escalation.
+
+
+Technical Description:
+The vulnerability appears to originate within the file, URLMON.dll, and is exposed by the API call 
+BuildUserAgentStringMobileHelper in which the dynamic-link-library phoneinfo.dll is loaded by a 
+LoadLibraryEx call in two locations:
+.text:000000018003BC82 loc_18003BC82:                          
+; CODE XREF: BuildUserAgentStringMobileHelper(UACOMPATMODE,char *,USERAGENT_TYPE,int)+73C
+.text:000000018003BC82                 mov     r12d, dword ptr [rsp+5F0h+var_5A0+4]
+.text:000000018003BC87                 cmp     r12d, 2
+.text:000000018003BC8B                 jz      loc_18003BFF1
+.text:000000018003BC91                 mov     r15d, 1
+.text:000000018003BC97                 cmp     r12d, 3
+.text:000000018003BC9B                 jz      loc_18003BD8B
+.text:000000018003BCA1                 mov     rsi, cs:qword_1801480A8
+.text:000000018003BCA8                 mov     [rbp+510h+MultiByteStr], 0
+.text:000000018003BCAC                 test    rsi, rsi
+.text:000000018003BCAF                 jnz     short loc_18003BCF3
+.text:000000018003BCB1                 xor     r8d, r8d        ; dwFlags
+.text:000000018003BCB4                 lea     rcx, LibFileName ; "phoneinfo.dll"
+.text:000000018003BCBB                 xor     edx, edx        ; hFile
+.text:000000018003BCBD                 call    cs:__imp_LoadLibraryExW
+
+                         and
+
+.text:000000018003BDA1 loc_18003BDA1:                          
+; CODE XREF: BuildUserAgentStringMobileHelper(UACOMPATMODE,char *,USERAGENT_TYPE,int)+A4E
+.text:000000018003BDA1                 xor     r8d, r8d        ; dwFlags
+.text:000000018003BDA4                 lea     rcx, LibFileName ; "phoneinfo.dll"
+.text:000000018003BDAB                 xor     edx, edx        ; hFile
+.text:000000018003BDAD                 call    cs:__imp_LoadLibraryExW
+
+In both vulnerable circumstances, LoadLibraryEx is called using dwFlags set to 0x00, thus performing 
+the same search pattern defined by DLLSearchOrder and LoadLibrary.
+Microsoft does not appear to install phoneinfo.dll within Microsoft Windows 10 desktop editions, 
+therefore when LoadLibraryEx is called, the SafeDLLSearchOrder  search is performed.  
+
+This will perform a standard file search on the following directories in order:
+1.) The directory specified by lpFileName.
+2.) The system directory. Use the GetSystemDirectory function to get the path of this directory.
+3.) The 16-bit system directory. There is no function that obtains the path of this directory, but 
+it is searched.
+4.) The Windows directory. Use the GetWindowsDirectory function to get the path of this directory.
+5.) The current directory. **Exploitable**
+6.) The directories that are listed in the PATH environment variable. Note that this does not 
+include the per-application path specified by the App Paths registry key. The App Paths key is not 
+used when computing the DLL search path. **Exploitable**
+
+When the search has reached #5 and #6 of the order, an attacker with limited privileges could 
+potentially hijack the search and provide a malicious phoneinfo.dll file which would get loaded by 
+the calling application.  
+
+Exploitation:
+In order to exploit these vulnerable functions, an attacker can target one of two code paths, the 
+first section of code is reachable in this manner:
+_____________________________________________________
+CINetHttpEdge::SetOptionUserAgent OR
+CINetHttp::SetOptionUserAgent OR
+CIEBrowserModeFilter::collectCacheEntryInfoCallback
+_____________________________________________________
+            |
+            V
+MapBrowserEmulationStateToUserAgent (Ordinal 445)
+            |
+            V
+InitUserAgentGlobals (Ordinal 492)
+            |
+            V
+BuildUserAgentStringMobileHelper
+ 
+While the second vulnerable LoadLibraryEx call is obtainable by this alternative code path:
+_____________________________________________________
+ObtainUserAgentString (Ordinal 211) OR
+GetUserAgentString
+_____________________________________________________
+            |
+            V
+InitUserAgentGlobals (Ordinal 492)
+            |
+            V
+BuildUserAgentStringMobileHelper
+
+Based on the vulnerable function calls and their cross references, it appears the most commonly 
+exposed vulnerable code path would be exposed by the ObtainUserAgentString API call.
+This call has the following layout:
+
+HRESULT ObtainUserAgentString(
+  _In_  DWORD  dwOption = 0,
+  _Out_ LPCSTR *pcszUAOut,
+  _Out_ DWORD  *cbSize
+);
+
+Exploitation can be confirmed by calling this API call and monitoring the attempted library load of 
+phoneinfo.dll through the SafeDLLSearchOrder locations.
+
+During investiation, CyberPoint SRT discovered the following Microsoft applications which call the 
+vulnerable URLMON.DLL functions are as follows:
+- Internet Explorer
+    At startup without parameters (ie double clicking and launching IE)
+- Skype
+    At startup (will perform persistent attempts to load this library)
+- OneDrive
+    During synchronization and updates (without user interaction)
+- Visual Studio 2015
+    During Microsoft account update or synchronization.
+ 
+In these scenarios an attacker could only gain programmatic access to the memory contents of these 
+applications - potentially intercepting Skype conversations, accessing OneDrive data, monitoring 
+internet activites within IE,  potentially modifying source code in Visual Studio products, or 
+abusing any of these to become persistent on the local machine.
+
+Since the vulnerability originates within URLMON.DLL, any application performing UserAgent 
+modification requests using URLMON.DLL are also potentially vulnerable.  This includes many 3rd 
+party applications, installers, and services.  Exploitation of these third party applications could 
+pontentially allow information disclosure, arbitrary code execution, system persistence,  
+elevation of privileges, or remote code execution.
+
+
+Mitigation / Protection:
+Apply the Microsoft supplied patch MS16-014 released on 09FEB2015.
+
+
+Credit:
+Greg Linares working with CyberPoint SRT
+
+Related Links:
+* Patch - Microsoft MS16-014
+    - https://technet.microsoft.com/en-us/library/security/ms16-014.aspx
+* LoadLibraryEX API Function Call:
+    - https://msdn.microsoft.com/en-us/library/windows/desktop/ms684179(v=vs.85).aspx
+* SafeDLLSearchOrder Documentation:
+    - https://msdn.microsoft.com/en-us/library/windows/desktop/ms682586(v=vs.85).aspx
+* ObtainUserAgentString API Function Call:
+    - https://msdn.microsoft.com/en-us/library/ms775114(v=vs.85).aspx
