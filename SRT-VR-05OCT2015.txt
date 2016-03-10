@@ -1,0 +1,86 @@
+SRT-VR-05OCT2015: Comodo Chromodo_Setup.exe Multiple DLL Planting Race Conditions Allow LEoP
+
+Severity:
+MEDIUM (Local EoP)
+
+
+Systems Affected:
+* Comodo Chromodo < v48.12.18.238
+* Comodo Dragon < v48.12.18.243
+NOTE: Chromodo included and set as default browser in default installations of Comodo Internet Security
+   - Tested Against 8.2.0.4703
+
+
+Description:
+A local privilege escalation vulnerability exists within Chromodo's update process that could allow 
+a user to gain NT AUTHORITY\SYSTEM level permission. This vulnerability is also due to a combination 
+of several insecure practices.
+
+Chromodo is set as the default browser upon installed Comodo Internet Security (CIS), and goes so 
+far as even replacing Google Chrome shortcuts with Chromodo on the desktop and Start Menu. While 
+this vulnerability is not necessarily part of the CIS code base, from our testing, it came along for
+the ride and puts default unpatched CIS installations at risk.
+
+  
+Technical Description:
+Updates for Comodo's browser, Chromodo, are performed automatically or whenever a user launches the 
+browser and goes to the "About Chromodo" option and selects update browser. In the former case, no
+user interaction is requested or required ; in the later, the user must agree to the update.
+
+Chromodo Updates are downloaded and stored in the insecure folder C:\Users\<USER>\AppData\Local\Temp\NSX###.TMP path 
+(where as # represent a random number and X is a random letter).   This folder by default has 
+writeable permissions by the currently logged in user.
+
+C:\Users\User\AppData\Local\Temp NT AUTHORITY\SYSTEM:(OI)(CI)F
+                                 BUILTIN\Administrators:(OI)(CI)F
+                                 DESKTOP-PRABIAQ\User:(OI)(CI)F
+
+Updates are initially checked by the SYSTEM service C:\Program Files (x86)\Comodo\Chromodo\chromodo_updater.exe.
+This service is auto executed on system start by the registry key - HKLM\System\CurrentControlSet\Services\ChromodoUpdater.
+
+After this binary determines a update is available it will download and copy the update, as well as 
+chromodo_setup.exe, to the C:\Windows\Temp\ folder.  This binary is then executed with SYSTEM level 
+privileges with the command line "C:\Windows\temp\chromodo_setup.exe --silent".  However the current 
+directory and the other components of the update are both set to C:\Users\User\AppData\Local\Temp\nsX###.tmp 
+folder.
+
+Upon updating, the Chromodo_Setup.exe will create this temp nsX###.tmp folder and begin file 
+extraction from \Windows\Temp\ to this folder.  
+
+During this time the following DLL files are extracted to the insecure User's Temp folder and can 
+be hijacked:
+- System.dll
+- DragonPlugin.dll
+- SecureDNSPlugin.dll
+- InstallHelperPlugin.dll
+- AccessControlW.dll
+- NsJSON.dll
+
+A local attacker can then create an application to monitor the C:\Users\User\AppData\Local\Temp\ 
+folder for any creation of the temp folders.  When an update is available, the application can then 
+beat the race condition and then plant a malicious DLL in the folder before the legitimate DLL is 
+copied.  These DLL files are then loaded at SYSTEM level privileges into Chromodo_Update.exe, 
+however after gaining elevated privileges the malicious attacker should migrate to a new process, 
+write another file, or stay persistent so the application can install the legit DLL in order to 
+prevent a failed Chromodo update.
+
+
+Mitigation / Protection:
+Upgrade your affected software suites to the following or greater:
+* Comodo Dragon v48.12.18.243
+* Comodo Chromodo v48.12.18.238
+
+
+Credit:
+Discovery: Greg Linares working with CyberPoint SRT
+
+
+Related Links:
+* Vendor Advisory:
+  - https://forums.comodo.com/news-announcements-feedback-cd/chromodo-48-dragon-48-are-now-available-for-download-t114917.0.html
+* Dragon v48.12.18.243:
+  - http://download.comodo.com/browser/update/dragon/dragonsetup.exe
+* Chromodo v48.12.18.238:
+  - http://download.comodo.com/browser/update/chromodo/chromodosetup.exe
+* Timeline comparison:
+  - https://www.cyberpointllc.com/srt/posts/srt-vulnerability-response-a-tale-of-two-vendors.html

