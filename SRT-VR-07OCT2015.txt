@@ -1,0 +1,64 @@
+SRT-VR-07OCT2015: Comodo Chromodo_Setup.exe DLL Search Order Hijack LEoP & Browser Injection
+
+Severity:
+Moderate (DLL Hijack / Injection)
+
+
+Systems Affected:
+* Comodo Internet Security < 8.2.0.4978
+
+
+Description:
+A local privilege elevation vulnerability exists within Chromodo's update process that could allow a 
+user to get NT AUTHORITY\SYSTEM level permissions.
+This vulnerability also allows a malicious local application to inject arbitrary code into the 
+Chromodo browser process upon startup.  This could be abused my malware in order to remain 
+persistent within the same memory space of Chromodo Browser in order to monitor or tamper a user's 
+web browsing habits and activities. 
+
+
+Technical Description:
+Comodo's Chromodo browser, Chromodo.exe, and it's update service, Chromodo_Setup.exe, both suffer 
+from a DLL search order hijacking vulnerability due to the insecure usage of LoadLibraryEx 
+attempting to load 'cmdshim32.dll'
+Both binaries call LoadLibraryExW using the dwFlags parameter set to 0x08. 
+
+.text:004023DE loc_4023DE:                            
+.text:004023DE                 push    8               ; dwFlags
+.text:004023E0                 push    0               ; hFile
+.text:004023E2                 push    ebx             ; lpLibFileName
+.text:004023E3                 call    ds:LoadLibraryExW
+.text:004023E9                 mov     [ebp+lParam], eax
+.text:004023EC                 test    eax, eax
+.text:004023EE                 jz      loc_402481
+
+When the dwFlags value is set to 0x08, LoadLibraryExW will execute LOAD_WITH_ALTERED_SEARCH_PATH 
+behavior.  This behavior causes both of these binaries to perform DLL searches across the system 
+using the currently installed user's PATH environment variable.
+
+This allows a local attacker or malicious application to abuse the insecure LoadLibraryExW call by 
+first adding a read/writable folder to the current user's PATH environment variable.  The attacker 
+would then drop a malicious DLL named 'cmdshim32.dll' into this folder.
+Upon starting Chromodo.exe the maliciously planted cmdshim32.dll is loaded and allows an attacker to 
+be resident within the browser.
+Additionally during a Chromodo update, the ChromodoUpdater service will also load this cmdshim32.dll 
+from the same location, allowing a malicious user or malicious application to elevate their 
+privileges to SYSTEM.
+
+
+Mitigation / Protection:
+Upgrade your affected software suites to the following or greater:
+* Comodo Internet Security v8.2.0.4978
+
+
+Credit:
+Discovery: Greg Linares working with CyberPoint SRT
+
+
+Related Links:
+* Vendor Advisory:
+  - http://cdn.download.comodo.com/cis/download/installs/updates/release/inis_4055/release_notes.html
+* Comodo Internet Security v8.2.0.4978:
+  - https://forums.comodo.com/news-announcements-feedback-cis/comodo-internet-security-8204978-fixes-build-is-released-t115059.0.html
+* Timeline comparison:
+  - https://www.cyberpointllc.com/srt/posts/srt-vulnerability-response-a-tale-of-two-vendors.html
